@@ -4,6 +4,7 @@ export type CartLine = {
   dishId: string
   qty: number
   supplementQty: number
+  note?: string
 }
 
 export function changeQty(lines: CartLine[], dishId: string, delta: number): CartLine[] {
@@ -12,7 +13,18 @@ export function changeQty(lines: CartLine[], dishId: string, delta: number): Car
   const supplementQty = Math.min(current?.supplementQty ?? 0, qty)
   const rest = lines.filter((line) => line.dishId !== dishId)
   if (qty === 0) return rest
-  return sortLines([...rest, { dishId, qty, supplementQty }])
+  const next: CartLine = { dishId, qty, supplementQty }
+  if (current?.note) next.note = current.note
+  return sortLines([...rest, next])
+}
+
+export function setNote(lines: CartLine[], dishId: string, note: string): CartLine[] {
+  const clean = note.replace(/\s+/g, ' ').trim().slice(0, 140)
+  return lines.map((line) => {
+    if (line.dishId !== dishId) return line
+    if (!clean) return { dishId: line.dishId, qty: line.qty, supplementQty: line.supplementQty }
+    return { ...line, note: clean }
+  })
 }
 
 export function changeSupplement(lines: CartLine[], dishId: string, delta: number): CartLine[] {

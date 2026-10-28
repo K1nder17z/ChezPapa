@@ -1,37 +1,16 @@
-import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
-import { toDataURL } from 'qrcode'
+import { useLayoutEffect, useMemo } from 'react'
 import { Rule } from '../brand/Ornaments.tsx'
 import { allDishes } from '../../data/menu.ts'
 import { useCartLines } from '../../lib/cartStore.ts'
 import { formatEuro } from '../../lib/format.ts'
-import { encodeTicket, priceLines, ticketUrl } from '../../lib/ticket.ts'
+import { useTableNumber } from '../../lib/ordering/client.ts'
+import { priceLines } from '../../lib/ticket.ts'
 import { syncBookDom } from '../book/syncBookDom.ts'
 
 export function OrderSheet() {
   const lines = useCartLines()
   const priced = useMemo(() => priceLines(lines), [lines])
-  const code = useMemo(() => encodeTicket(lines), [lines])
-  const [qr, setQr] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!code) return
-    let cancel = false
-    toDataURL(ticketUrl(window.location.origin, code), {
-      margin: 1,
-      width: 320,
-      errorCorrectionLevel: 'M',
-      color: { dark: '#100D0A', light: '#FFFFFF' },
-    })
-      .then((image) => {
-        if (!cancel) setQr(image)
-      })
-      .catch(() => {
-        if (!cancel) setQr(null)
-      })
-    return () => {
-      cancel = true
-    }
-  }, [code])
+  const table = useTableNumber()
 
   useLayoutEffect(() => {
     syncBookDom()
@@ -44,8 +23,19 @@ export function OrderSheet() {
         <h2>Votre commande</h2>
         <Rule />
       </header>
+      <p className="order-table">{table ? `Table ${table}` : 'Scannez le QR code de votre table pour commander.'}</p>
+      {table && priced.lines.length > 0 ? (
+        <a className="order-go" href="/ma-commande" data-order-go>
+          Valider la commande
+        </a>
+      ) : null}
+      {table ? (
+        <a className="order-find" href="/ma-commande" data-order-go>
+          Retrouver ma commande
+        </a>
+      ) : null}
       {priced.lines.length === 0 ? (
-        <p className="lede">Ajoutez un plat avec +. Le total et le code pour la salle s’affichent ici.</p>
+        <p className="lede">Ajoutez un plat avec +. Le total s’affiche ici.</p>
       ) : (
         <>
           <ul className="order-lines">
@@ -114,14 +104,6 @@ export function OrderSheet() {
               <span>Total</span>
               <strong>{formatEuro(priced.totalCents)}</strong>
             </p>
-            {code && qr ? (
-              <figure className="order-qr">
-                <img src={qr} alt="Code à faire scanner par le restaurant" />
-                <figcaption>Montrez ce code au restaurant. Il indique la table, puis suit la commande.</figcaption>
-              </figure>
-            ) : (
-              <p className="lede">Préparation du code…</p>
-            )}
           </div>
         </>
       )}

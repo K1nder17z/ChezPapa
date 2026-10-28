@@ -1,5 +1,6 @@
 const boundButtons = new WeakSet<HTMLButtonElement>()
 const boundStars = new WeakSet<HTMLAnchorElement>()
+const boundOrderLinks = new WeakSet<HTMLAnchorElement>()
 
 function keepGesture(node: HTMLElement) {
   const stop = (event: Event) => event.stopPropagation()
@@ -17,6 +18,11 @@ export function bindCartButtons(root: ParentNode) {
   root.querySelectorAll('a[data-google-star]').forEach((node) => {
     if (!(node instanceof HTMLAnchorElement) || boundStars.has(node)) return
     boundStars.add(node)
+    keepGesture(node)
+  })
+  root.querySelectorAll('a[data-order-go]').forEach((node) => {
+    if (!(node instanceof HTMLAnchorElement) || boundOrderLinks.has(node)) return
+    boundOrderLinks.add(node)
     keepGesture(node)
   })
 }

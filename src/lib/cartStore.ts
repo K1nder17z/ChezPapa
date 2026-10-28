@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { applyCartAction, type CartLine } from './cart.ts'
+import { applyCartAction, setNote, type CartLine } from './cart.ts'
 
 const KEY = 'chezpapa-cart'
 
@@ -15,8 +15,11 @@ function readCart(): CartLine[] {
       const dishId = 'dishId' in entry ? entry.dishId : ''
       const qty = 'qty' in entry ? entry.qty : 0
       const supplementQty = 'supplementQty' in entry ? entry.supplementQty : 0
+      const note = 'note' in entry && typeof entry.note === 'string' ? entry.note.trim().slice(0, 140) : ''
       if (typeof dishId !== 'string' || !Number.isInteger(qty) || qty <= 0) return []
-      return [{ dishId, qty, supplementQty: Number.isInteger(supplementQty) ? supplementQty : 0 }]
+      const line: CartLine = { dishId, qty, supplementQty: Number.isInteger(supplementQty) ? supplementQty : 0 }
+      if (note) line.note = note
+      return [line]
     })
   } catch {
     return []
@@ -48,6 +51,14 @@ export function useCartLines(): CartLine[] {
 
 export function dispatchCart(action: string, dishId: string) {
   emit(applyCartAction(lines, action, dishId))
+}
+
+export function setCartNote(dishId: string, note: string) {
+  emit(setNote(lines, dishId, note))
+}
+
+export function clearCart() {
+  emit([])
 }
 
 export function installCartClicks(): () => void {

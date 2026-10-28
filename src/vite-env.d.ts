@@ -10,6 +10,7 @@ interface ImportMetaEnv {
   readonly VITE_RESTAURANT_INSTAGRAM?: string
   readonly VITE_RESTAURANT_FACEBOOK?: string
   readonly VITE_SALLE_CODE?: string
+  readonly VITE_API_BASE?: string
 }
 
 interface ImportMeta {

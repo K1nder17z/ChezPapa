@@ -40,6 +40,7 @@ export function PrintPage() {
     <main className="print-page">
       <div className="print-actions no-print">
         <Link to="/menu">Retour à la carte</Link>
+        <Link to="/impression/tables">QR des tables</Link>
         <button type="button" onClick={() => window.print()} disabled={!svg}>
           Imprimer
         </button>

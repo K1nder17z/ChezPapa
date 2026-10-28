@@ -1,5 +1,11 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+  "rewrites": [
+    { "source": "/api/:a/:b/:c/:d/:e", "destination": "/api/gateway?a=:a&b=:b&c=:c&d=:d&e=:e" },
+    { "source": "/api/:a/:b/:c/:d", "destination": "/api/gateway?a=:a&b=:b&c=:c&d=:d" },
+    { "source": "/api/:a/:b/:c", "destination": "/api/gateway?a=:a&b=:b&c=:c" },
+    { "source": "/api/:a/:b", "destination": "/api/gateway?a=:a&b=:b" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/photos/(.*)",

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Chez Papa Salle</string>
+    <string name="title_activity_main">Chez Papa Salle</string>
+    <string name="package_name">be.chezpapa.salle</string>
+    <string name="custom_url_scheme">be.chezpapa.salle</string>
+</resources>
