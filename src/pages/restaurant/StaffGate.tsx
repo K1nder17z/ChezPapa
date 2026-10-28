@@ -12,8 +12,8 @@ export function StaffGate({ children }: { children: ReactNode }) {
         <Link to="/salle" aria-current={location.pathname === '/salle' ? 'page' : undefined}>
           Tableau
         </Link>
-        <Link to="/salle/scanner" aria-current={location.pathname === '/salle/scanner' ? 'page' : undefined}>
-          Scanner
+        <Link to="/impression/tables" aria-current={location.pathname === '/impression/tables' ? 'page' : undefined}>
+          QR tables
         </Link>
         <Link to="/salle/historique" aria-current={location.pathname === '/salle/historique' ? 'page' : undefined}>
           Historique

@@ -54,10 +54,20 @@ export const FlipBook = forwardRef<BookHandle, FlipBookProps>(function FlipBook(
     },
     prev() {
       if (failed) {
-        setPlainIndex((current) => Math.max(0, current - 1))
+        setPlainIndex((current) => {
+          const next = Math.max(0, current - 1)
+          onStatusRef.current({ index: next, count: countRef.current, orientation: 'portrait' })
+          return next
+        })
         return
       }
-      flipRef.current?.flipPrev('bottom')
+      const book = flipRef.current
+      if (!book) return
+      const index = book.getCurrentPageIndex()
+      if (index <= 0) return
+      const area = book.getBoundsRect()
+      book.getFlipController().flip({ x: area.left + 12, y: 12 })
+      if (book.getState() === 'read' && book.getCurrentPageIndex() === index) book.turnToPage(index - 1)
     },
     goTo(index: number) {
       if (failed) {

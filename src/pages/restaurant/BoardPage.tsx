@@ -12,6 +12,7 @@ import {
 } from '../../lib/ordering/client.ts'
 import { connectionState, statusLabel, waitingLabel, type OrderStatus, type Tone } from '../../lib/ordering/domain.ts'
 import type { Board, BoardAlert } from '../../server/contracts.ts'
+import { FloorPlan } from './FloorPlan.tsx'
 import { StaffGate } from './StaffGate.tsx'
 
 export function BoardPage() {
@@ -79,7 +80,7 @@ function LiveBoard() {
   const link = connectionState({ navigatorOnline: !offline && navigator.onLine, lastError: error })
   const live = (board?.tables ?? []).flatMap((table) =>
     table.orders
-      .filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
+      .filter((order) => order.status === 'submitted' || order.status === 'ready_for_pickup')
       .map((order) => ({ ...order, tableNumber: table.number })),
   )
   live.sort((a, b) => rank(a.status) - rank(b.status) || a.tableNumber - b.tableNumber)
@@ -120,7 +121,7 @@ function LiveBoard() {
       </header>
       {notice ? (
         <div className="desk-alert" role="alert">
-          <strong>Table {notice.tableNumber} — à récupérer</strong>
+          <strong>Table {notice.tableNumber} — à confirmer</strong>
           <span>
             Commande {notice.publicNumber}. {waitingLabel(notice.waitingSeconds)}.
           </span>
@@ -128,8 +129,8 @@ function LiveBoard() {
         </div>
       ) : null}
       <section className="desk-live">
-        <h2>Commandes en cours</h2>
-        {live.length === 0 ? <p className="desk-empty">Aucune commande en cours.</p> : null}
+        <h2>À confirmer</h2>
+        {live.length === 0 ? <p className="desk-empty">Aucune commande confirmée par les clients.</p> : null}
         <ul className="order-list">
           {live.map((order) => (
             <li key={order.id}>
@@ -149,22 +150,8 @@ function LiveBoard() {
         </ul>
       </section>
       <section className="desk-tables">
-        <h2>Tables</h2>
-        <div className="table-grid">
-          {(board?.tables ?? []).map((table) => {
-            const primary = [...table.orders].sort((a, b) => rank(a.status) - rank(b.status))[0]
-            return (
-              <Link key={table.number} to={`/salle/table/${table.number}`} className="table-card" data-tone={table.tone}>
-                <strong>{table.number}</strong>
-                <span>{table.label}</span>
-                <small>
-                  {primary ? primary.publicNumber : 'Libre'}
-                  {table.orders.length > 1 ? ` · ${table.orders.length}` : ''}
-                </small>
-              </Link>
-            )
-          })}
-        </div>
+        <h2>Salle</h2>
+        <FloorPlan tables={board?.tables ?? []} />
         <form
           className="desk-count"
           onSubmit={(event) => {
@@ -184,16 +171,13 @@ function LiveBoard() {
 }
 
 function rank(status: string): number {
-  if (status === 'ready_for_pickup') return 0
-  if (status === 'claimed') return 1
-  if (status === 'submitted' || status === 'draft') return 2
-  return 3
+  if (status === 'submitted' || status === 'ready_for_pickup') return 0
+  return 1
 }
 
 function toneFor(status: OrderStatus): Tone {
-  if (status === 'ready_for_pickup') return 'red'
+  if (status === 'submitted' || status === 'ready_for_pickup') return 'red'
   if (status === 'claimed') return 'orange'
-  if (status === 'submitted' || status === 'draft') return 'blue'
   if (status === 'completed') return 'green'
   return 'grey'
 }

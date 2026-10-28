@@ -34,6 +34,9 @@ declare module 'page-flip/dist/js/page-flip.module.js' {
     flipPrev(corner?: 'top' | 'bottom'): void
     flip(page: number, corner?: 'top' | 'bottom'): void
     turnToPage(page: number): void
+    getBoundsRect(): { left: number; top: number; width: number; height: number; pageWidth: number }
+    getState(): string
+    getFlipController(): { flip(point: { x: number; y: number }): void }
     getCurrentPageIndex(): number
     getPageCount(): number
     getOrientation(): 'portrait' | 'landscape'

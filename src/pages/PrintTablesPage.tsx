@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toString } from 'qrcode'
 import { Emblem } from '../components/brand/Ornaments.tsx'
+import { restaurant } from '../config/restaurant.ts'
 import { apiSend } from '../lib/ordering/client.ts'
 
 type Tent = { number: number; svg: string; url: string }
@@ -9,7 +10,8 @@ type Tent = { number: number; svg: string; url: string }
 export function PrintTablesPage() {
   const [tents, setTents] = useState<Tent[]>([])
   const [message, setMessage] = useState('')
-  const local = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+  const origin = restaurant.publicMenuUrl ? new URL(restaurant.publicMenuUrl).origin : window.location.origin
+  const local = origin.includes('localhost') || origin.includes('127.0.0.1')
 
   useEffect(() => {
     document.title = 'QR des tables — Chez Papa'
@@ -18,7 +20,6 @@ export function PrintTablesPage() {
       const result = await apiSend<{ tables: Array<{ number: number; path: string }> }>('/api/tables')
       const tables = result.ok ? result.data.tables : Array.from({ length: 10 }, (_, index) => ({ number: index + 1, path: `/t/${index + 1}` }))
       if (!result.ok) setMessage('Le nombre de tables configuré n’a pas pu être lu. Dix tables sont proposées.')
-      const origin = window.location.origin
       const next: Tent[] = []
       for (const table of tables) {
         const url = `${origin}${table.path}`
@@ -36,7 +37,7 @@ export function PrintTablesPage() {
     return () => {
       cancel = true
     }
-  }, [])
+  }, [origin])
 
   return (
     <main className="print-page">
@@ -57,8 +58,9 @@ export function PrintTablesPage() {
         <article className="tent tent-sheet" key={tent.number}>
           <Emblem />
           <h1>Chez Papa</h1>
+          <p className="tent-number">{String(tent.number).padStart(2, '0')}</p>
           <p className="tent-sub">Table {tent.number}</p>
-          <p className="tent-invite">Scannez pour commander</p>
+          <p className="tent-invite">Un QR pour toute la table. Scannez pour commander.</p>
           <div className="qr" dangerouslySetInnerHTML={{ __html: tent.svg }} />
           <p className="tent-url">{tent.url}</p>
         </article>

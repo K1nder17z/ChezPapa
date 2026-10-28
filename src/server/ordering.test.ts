@@ -114,21 +114,26 @@ describe('parcours commande', () => {
     expect(orderA).toMatchObject({ status: 'submitted', qrPayload: null })
     const readyA = (await api(current, 'GET', '/api/client/orders', undefined, tokenA)).data.orders as ClientOrder[]
     const readyB = (await api(current, 'GET', '/api/client/orders', undefined, tokenB)).data.orders as ClientOrder[]
-    expect(readyA[0]?.qrPayload).not.toBe(readyB[0]?.qrPayload)
+    const qrA = readyA.find((order) => order.id === orderA.id)?.qrPayload
+    const qrB = readyB.find((order) => order.id === orderB.id)?.qrPayload
+    expect(readyA.map((order) => order.id).sort()).toEqual(readyB.map((order) => order.id).sort())
+    expect(qrA).toMatch(/^chezpapa-pickup:v1:/)
+    expect(qrB).toMatch(/^chezpapa-pickup:v1:/)
+    expect(qrA).not.toBe(qrB)
     const board = await api(current, 'GET', '/api/staff/board', undefined, staffToken)
     const table = (board.data.tables as Array<{ number: number; tone: string; orders: unknown[] }>).find((item) => item.number === 4)
     expect(table?.tone).toBe('red')
     expect(table?.orders).toHaveLength(2)
-    const claimed = await api(current, 'POST', '/api/staff/claim', { pickupToken: readyA[0]?.qrPayload }, staffToken)
+    const claimed = await api(current, 'POST', '/api/staff/claim', { pickupToken: qrA }, staffToken)
     expect(claimed.status).toBe(200)
     expect(claimed.data.status).toBe('claimed')
     const after = await api(current, 'GET', '/api/staff/board', undefined, staffToken)
     const still = (after.data.tables as Array<{ number: number; tone: string }>).find((item) => item.number === 4)
     expect(still?.tone).toBe('red')
-    const reused = await api(current, 'POST', '/api/staff/claim', { pickupToken: readyA[0]?.qrPayload }, staffToken)
+    const reused = await api(current, 'POST', '/api/staff/claim', { pickupToken: qrA }, staffToken)
     expect(reused.status).toBe(409)
     expect(reused.data.code).toBe('already_claimed')
-    const second = await api(current, 'POST', '/api/staff/verify', { pickupToken: readyB[0]?.qrPayload }, staffToken)
+    const second = await api(current, 'POST', '/api/staff/verify', { pickupToken: qrB }, staffToken)
     expect(second.status).toBe(200)
     expect(second.data.publicNumber).toBe(orderB.publicNumber)
     expect(second.data.recoverable).toBe(true)
@@ -171,13 +176,55 @@ describe('parcours commande', () => {
     expect(down.status).toBe(503)
     expect(down.data.code).toBe('unavailable')
   })
+
+  it('relie les téléphones d’une table et n’alerte la salle qu’après confirmation', async () => {
+    const current = store()
+    const phoneA = await device(current, 3)
+    const phoneB = await device(current, 3)
+    const other = await device(current, 8)
+    const staff = await api(current, 'POST', '/api/staff/login', { password: secret })
+    const staffToken = staff.data.token as string
+    const before = await api(current, 'GET', '/api/staff/board', undefined, staffToken)
+    const quiet = (before.data.tables as Array<{ number: number; tone: string; orders: unknown[] }>).find((item) => item.number === 3)
+    expect(quiet?.tone).toBe('blue')
+    expect(quiet?.orders).toHaveLength(0)
+    const created = (await submit(current, phoneA, 'lien-table')).data as unknown as ClientOrder
+    const seen = (await api(current, 'GET', '/api/client/orders', undefined, phoneB)).data.orders as ClientOrder[]
+    expect(seen.map((order) => order.id)).toContain(created.id)
+    const hidden = (await api(current, 'GET', '/api/client/orders', undefined, other)).data.orders as ClientOrder[]
+    expect(hidden).toHaveLength(0)
+    const board = await api(current, 'GET', '/api/staff/board', undefined, staffToken)
+    const table = (board.data.tables as Array<{ number: number; tone: string; label: string }>).find((item) => item.number === 3)
+    expect(table).toMatchObject({ tone: 'red', label: 'À confirmer' })
+    expect(board.data.alerts).toEqual(expect.arrayContaining([expect.objectContaining({ orderId: created.id, tableNumber: 3 })]))
+    const confirmed = await api(current, 'POST', `/api/staff/orders/${created.id}/confirm`, {}, staffToken)
+    expect(confirmed.status).toBe(200)
+    expect(confirmed.data.status).toBe('claimed')
+    const amended = await api(
+      current,
+      'POST',
+      `/api/staff/orders/${created.id}/items`,
+      { lines: [{ dishId: 'tiramisu', qty: 2, supplementQty: 0 }], note: 'sans café' },
+      staffToken,
+    )
+    expect(amended.status).toBe(200)
+    expect(amended.data.totalCents).toBe(500)
+    expect(amended.data.status).toBe('claimed')
+    const paid = await api(current, 'POST', `/api/staff/orders/${created.id}/pay`, {}, staffToken)
+    expect(paid.data.paid).toBe(true)
+    const after = await api(current, 'GET', '/api/staff/board', undefined, staffToken)
+    const served = (after.data.tables as Array<{ number: number; label: string }>).find((item) => item.number === 3)
+    expect(served?.label).toBe('Payée')
+    const closed = await api(current, 'POST', `/api/staff/sessions/${created.sessionId}/close`, {}, staffToken)
+    expect(closed.status).toBe(200)
+  })
 })
 
 describe('présentation', () => {
   it('colore la table et décrit l’attente et la coupure réseau', () => {
     expect(tablePresentation(['submitted', 'ready_for_pickup']).tone).toBe('red')
     expect(tablePresentation(['claimed', 'completed']).tone).toBe('orange')
-    expect(tablePresentation(['submitted']).label).toBe('En cours')
+    expect(tablePresentation(['submitted']).label).toBe('À confirmer')
     expect(tablePresentation([]).tone).toBe('grey')
     expect(waitingLabel(10)).toBe("à l'instant")
     expect(waitingLabel(125)).toBe('depuis 2 min')

@@ -55,6 +55,9 @@ export const restaurant = {
   hours: optionalText(import.meta.env.VITE_RESTAURANT_HOURS),
   mapsUrl: optionalUrl(import.meta.env.VITE_RESTAURANT_MAPS_URL),
   reviewsUrl: optionalUrl(import.meta.env.VITE_RESTAURANT_REVIEWS_URL),
+  reviewHref:
+    optionalUrl(import.meta.env.VITE_RESTAURANT_REVIEWS_URL) ??
+    'https://www.google.com/maps/search/?api=1&query=Chez%20papa%20Rue%20de%20Ribaucourt%2027%201080%20Molenbeek-Saint-Jean',
   instagram: optionalUrl(import.meta.env.VITE_RESTAURANT_INSTAGRAM),
   facebook: optionalUrl(import.meta.env.VITE_RESTAURANT_FACEBOOK),
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { toDataURL } from 'qrcode'
+import { GoogleStars } from '../components/review/GoogleStars.tsx'
+import { restaurant } from '../config/restaurant.ts'
 import { allDishes } from '../data/menu.ts'
 import { clearCart, dispatchCart, setCartNote, useCartLines } from '../lib/cartStore.ts'
 import { formatEuro } from '../lib/format.ts'
@@ -14,9 +15,26 @@ import {
   orderNote,
   saveOrderNote,
 } from '../lib/ordering/client.ts'
-import { statusLabel, type OrderStatus } from '../lib/ordering/domain.ts'
+import type { OrderStatus } from '../lib/ordering/domain.ts'
 import { priceLines } from '../lib/ticket.ts'
 import type { ClientOrder } from '../server/contracts.ts'
+
+const REVIEW_KEY = 'chezpapa-ask-review'
+
+function reviewTarget(): string | null {
+  try {
+    return sessionStorage.getItem(REVIEW_KEY)
+  } catch {
+    return null
+  }
+}
+
+function guestStatus(status: OrderStatus): string {
+  if (status === 'claimed') return 'Confirmée par le restaurant'
+  if (status === 'completed') return 'Terminée'
+  if (status === 'cancelled') return 'Annulée'
+  return 'Envoyée au restaurant'
+}
 
 export function MyOrderPage() {
   const lines = useCartLines()
@@ -26,8 +44,9 @@ export function MyOrderPage() {
   const [note, setNote] = useState(orderNote)
   const [message, setMessage] = useState('')
   const [offline, setOffline] = useState(false)
-  const [pending, setPending] = useState<'submit' | 'ready' | null>(null)
+  const [pending, setPending] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [askReview, setAskReview] = useState<string | null>(reviewTarget)
 
   useEffect(() => {
     document.title = 'Votre commande — Chez Papa'
@@ -39,7 +58,8 @@ export function MyOrderPage() {
   useEffect(() => {
     if (!table) return
     let cancel = false
-    void (async () => {
+    let timer = 0
+    const pull = async () => {
       const session = await ensureDevice(table)
       if (cancel) return
       if (!session.ok) {
@@ -59,32 +79,24 @@ export function MyOrderPage() {
         setOffline(false)
       }
       setLoaded(true)
-    })()
+      timer = window.setTimeout(() => void pull(), 4000)
+    }
+    void pull()
     return () => {
       cancel = true
+      window.clearTimeout(timer)
     }
   }, [table])
 
-  async function reload() {
-    const listed = await apiSend<{ orders: ClientOrder[] }>('/api/client/orders', { token: deviceToken() })
-    if (!listed.ok) {
-      setOffline(listed.offline)
-      setMessage(listed.message)
-      return
-    }
-    setOrders(listed.data.orders)
-    setOffline(false)
-  }
-
   async function submit() {
     if (pending || !table || priced.lines.length === 0) return
-    setPending('submit')
+    setPending(true)
     setMessage('')
     const session = await ensureDevice(table)
     if (!session.ok) {
-      setPending(null)
+      setPending(false)
       setOffline(session.offline)
-      setMessage(session.offline ? session.message : session.message)
+      setMessage(session.message)
       return
     }
     const result = await apiSend<ClientOrder>('/api/client/orders', {
@@ -102,7 +114,7 @@ export function MyOrderPage() {
         })),
       },
     })
-    setPending(null)
+    setPending(false)
     if (!result.ok) {
       setOffline(result.offline)
       setMessage(result.message)
@@ -114,53 +126,97 @@ export function MyOrderPage() {
     clearCart()
     setOffline(false)
     setMessage('')
-    await reload()
-  }
-
-  async function finish(orderId: string) {
-    if (pending) return
-    setPending('ready')
-    setMessage('')
-    const result = await apiSend<ClientOrder>(`/api/client/orders/${orderId}/ready`, {
-      method: 'POST',
-      token: deviceToken(),
-      body: {},
-    })
-    setPending(null)
-    if (!result.ok) {
-      setOffline(result.offline)
-      setMessage(result.message)
-      return
+    try {
+      sessionStorage.setItem(REVIEW_KEY, result.data.id)
+    } catch {
+      /* navigation privée */
     }
-    setOffline(false)
-    await reload()
+    setAskReview(result.data.id)
+    setOrders((current) => {
+      const rest = current.filter((order) => order.id !== result.data.id)
+      return [...rest, result.data]
+    })
   }
 
-  const active = orders.filter((order) => order.status === 'submitted' || order.status === 'ready_for_pickup')
+  const visible = orders.filter((order) => order.status !== 'cancelled')
+  const reviewing = visible.find((order) => order.id === askReview) ?? null
 
   return (
     <main className="salle-page">
       <article className="salle-card order-confirm">
         <p className="kicker">Chez Papa</p>
         <h1>Votre commande</h1>
-        {table ? <p className="order-table-label">Table {table}</p> : <p>Scannez le QR code posé sur votre table.</p>}
+        {table ? (
+          <>
+            <p className="order-table-label">Table {table}</p>
+            <p className="linked-note">
+              Un seul QR pour cette table. Les autres téléphones qui le scannent partagent la même addition.
+            </p>
+          </>
+        ) : (
+          <p>Scannez le QR code posé sur votre table.</p>
+        )}
         {offline || message ? (
           <p className="salle-error" role="alert">
             {message}
           </p>
         ) : null}
-        {active.map((order) =>
-          order.status === 'ready_for_pickup' ? (
-            <ReadyTicket key={order.id} order={order} />
-          ) : (
-            <SubmittedTicket key={order.id} order={order} pending={pending === 'ready'} onFinish={() => void finish(order.id)} />
-          ),
-        )}
-        {table && loaded && (priced.lines.length > 0 || active.length === 0) ? (
+        {reviewing ? (
+          <section className="review-ask">
+            <p className="kicker">Merci</p>
+            <h2>Commande confirmée</h2>
+            <p>
+              La table {reviewing.tableNumber} l’a reçue. Un avis sur le service aide beaucoup le restaurant.
+            </p>
+            <GoogleStars url={restaurant.reviewHref} />
+            <a className="finish-order review-go" href={restaurant.reviewHref} rel="noopener noreferrer">
+              Écrire un avis sur Google
+            </a>
+            <button
+              type="button"
+              className="text-dismiss"
+              onClick={() => {
+                try {
+                  sessionStorage.removeItem(REVIEW_KEY)
+                } catch {
+                  /* navigation privée */
+                }
+                setAskReview(null)
+              }}
+            >
+              Plus tard
+            </button>
+          </section>
+        ) : null}
+        {visible.map((order) => (
+          <section className="ticket" key={order.id}>
+            <p className="kicker">{guestStatus(order.status)}</p>
+            <h2>
+              Table {order.tableNumber}
+              <small>Commande {order.publicNumber}</small>
+            </h2>
+            <ul className="service-lines">
+              {order.items.map((item) => (
+                <li key={`${item.dishId}-${item.note}`}>
+                  <span>
+                    {item.qty} × {item.name}
+                    {item.note ? <small>{item.note}</small> : null}
+                  </span>
+                  <strong>{formatEuro(item.lineCents)}</strong>
+                </li>
+              ))}
+            </ul>
+            <p className="order-total">
+              <span>Total</span>
+              <strong>{formatEuro(order.totalCents)}</strong>
+            </p>
+          </section>
+        ))}
+        {table && loaded ? (
           <section className="cart-editor">
-            {active.length > 0 ? <h2>Autre commande</h2> : null}
+            {visible.length > 0 ? <h2>Ajouter à la table</h2> : null}
             {priced.lines.length === 0 ? (
-              <p>Le panier est vide.</p>
+              <p>{visible.length > 0 ? 'Le panier est vide. Vous pouvez encore commander.' : 'Le panier est vide.'}</p>
             ) : (
               <>
                 <ul className="service-lines">
@@ -228,8 +284,8 @@ export function MyOrderPage() {
                   <span>Total</span>
                   <strong>{formatEuro(priced.totalCents)}</strong>
                 </p>
-                <button type="button" className="finish-order" disabled={pending !== null || priced.lines.length === 0} onClick={() => void submit()}>
-                  {pending === 'submit' ? 'Enregistrement…' : 'Valider la commande'}
+                <button type="button" className="finish-order" disabled={pending || priced.lines.length === 0} onClick={() => void submit()}>
+                  {pending ? 'Enregistrement…' : 'Confirmer la commande'}
                 </button>
               </>
             )}
@@ -239,96 +295,5 @@ export function MyOrderPage() {
         <Link to={table ? `/t/${table}` : '/menu'}>Retour à la carte</Link>
       </article>
     </main>
-  )
-}
-
-function SubmittedTicket({ order, pending, onFinish }: { order: ClientOrder; pending: boolean; onFinish: () => void }) {
-  return (
-    <section className="ticket">
-      <p className="kicker">Récapitulatif</p>
-      <h2>
-        Table {order.tableNumber}
-        <small>Commande {order.publicNumber}</small>
-      </h2>
-      <OrderLines order={order} />
-      <p className="order-total">
-        <span>Total</span>
-        <strong>{formatEuro(order.totalCents)}</strong>
-      </p>
-      <button type="button" className="finish-order" disabled={pending} onClick={onFinish}>
-        {pending ? 'Enregistrement…' : 'J’ai terminé ma commande'}
-      </button>
-    </section>
-  )
-}
-
-function ReadyTicket({ order }: { order: ClientOrder }) {
-  const [image, setImage] = useState<string | null>(null)
-  useEffect(() => {
-    if (!order.qrPayload) return
-    let cancel = false
-    void toDataURL(order.qrPayload, {
-      margin: 2,
-      width: 360,
-      errorCorrectionLevel: 'H',
-      color: { dark: '#100D0A', light: '#FFFFFF' },
-    }).then((value) => {
-      if (!cancel) setImage(value)
-    })
-    return () => {
-      cancel = true
-    }
-  }, [order.qrPayload])
-  return (
-    <section className="ticket">
-      <p className="kicker">{statusLabel[order.status as OrderStatus]}</p>
-      <h2>
-        Table {order.tableNumber}
-        <small>Commande {order.publicNumber}</small>
-      </h2>
-      <OrderLines order={order} />
-      <p className="order-total">
-        <span>Total</span>
-        <strong>{formatEuro(order.totalCents)}</strong>
-      </p>
-      {image ? (
-        <figure className="pickup-qr">
-          <img src={image} alt={`QR code de la commande ${order.publicNumber}`} />
-        </figure>
-      ) : (
-        <p>Préparation du QR code…</p>
-      )}
-      <p className="pickup-note">
-        Votre commande est prête à être récupérée par le restaurant. Gardez ce QR code affiché sur votre téléphone
-        jusqu’au passage du restaurateur.
-      </p>
-    </section>
-  )
-}
-
-function OrderLines({ order }: { order: ClientOrder }) {
-  return (
-    <ul className="service-lines">
-      {order.items.map((item) => (
-        <li key={item.dishId}>
-          <span>
-            {item.qty} × {item.name}
-            <small>{formatEuro(item.unitCents)}</small>
-            {item.supplementLabel ? (
-              <small>
-                {item.supplementLabel} × {item.supplementQty}
-              </small>
-            ) : null}
-            {item.note ? <small>{item.note}</small> : null}
-          </span>
-          <strong>{formatEuro(item.lineCents)}</strong>
-        </li>
-      ))}
-      {order.note ? (
-        <li>
-          <span>{order.note}</span>
-        </li>
-      ) : null}
-    </ul>
   )
 }

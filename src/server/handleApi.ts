@@ -95,6 +95,8 @@ async function route(request: Request, url: URL, store: OrderStore): Promise<Res
   if (method === 'POST' && parts[1] === 'staff' && parts[2] === 'orders' && parts.length === 5) {
     const id = parts[3] ?? ''
     const action = parts[4]
+    if (action === 'confirm') return send(await store.confirm(bearer ?? '', id))
+    if (action === 'items') return send(await store.amend(bearer ?? '', id, await readBody(request)))
     if (action === 'complete') return send(await store.complete(bearer ?? '', id))
     if (action === 'cancel') return send(await store.cancel(bearer ?? '', id))
     if (action === 'pay') return send(await store.pay(bearer ?? '', id))

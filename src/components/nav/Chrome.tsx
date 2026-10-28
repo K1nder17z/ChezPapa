@@ -1,4 +1,5 @@
 import { categories } from '../../data/menu.ts'
+import { useTableNumber } from '../../lib/ordering/client.ts'
 import { categoryPageIndex, sheetLabel, type BookSheet } from '../../lib/sheets.ts'
 import type { BookStatus } from '../book/FlipBook.tsx'
 import { Emblem } from '../brand/Ornaments.tsx'
@@ -24,11 +25,13 @@ export function TopBar({
   onClose: () => void
   onOrder: () => void
 }) {
+  const table = useTableNumber()
   return (
     <header className="topbar">
       <p className="brand">
         <Emblem className="emblem emblem-sm" />
         <span>Chez Papa</span>
+        {table ? <b className="table-chip">Table {table}</b> : null}
       </p>
       <div className="top-actions">
         <button type="button" onClick={onOrder}>

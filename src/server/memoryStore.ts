@@ -1,11 +1,13 @@
 import {
   PICKUP_TTL_MS,
   canTransition,
+  orderWaitSeconds,
   parseCartPayload,
+  parseStaffCart,
   pickupPayload,
   readPickupToken,
+  serviceTone,
   snapshotCart,
-  tablePresentation,
   type OrderItem,
   type OrderStatus,
 } from '../lib/ordering/domain.ts'
@@ -147,10 +149,7 @@ export function createMemoryStore(options: { staffPassword: string; tokenKey: st
   }
 
   function staffView(order: Order, nowMs: number): StaffOrder {
-    const waiting =
-      order.status === 'ready_for_pickup' && order.readyAt
-        ? Math.max(0, Math.floor((nowMs - Date.parse(order.readyAt)) / 1000))
-        : null
+    const waiting = orderWaitSeconds(order.status, order.submittedAt, order.readyAt, nowMs)
     const recoverable =
       order.status === 'ready_for_pickup' &&
       order.pickupStatus === 'active' &&
@@ -250,9 +249,9 @@ export function createMemoryStore(options: { staffPassword: string; tokenKey: st
       if (!device) return fail('unauthorized')
       const session = sessionOf(device)
       if (!session) return fail('unauthorized')
-      const own = orders.filter((order) => order.deviceId === device.id)
+      const shared = orders.filter((order) => order.sessionId === device.sessionId)
       const views: ClientOrder[] = []
-      for (const order of own) views.push(await clientView(order))
+      for (const order of shared) views.push(await clientView(order))
       return {
         ok: true,
         value: { tableNumber: device.tableNumber, sessionStatus: session.status, orders: views },
@@ -364,22 +363,22 @@ export function createMemoryStore(options: { staffPassword: string; tokenKey: st
       for (let number = 1; number <= tableCount; number += 1) {
         const session = openSession(number)
         const sessionOrders = session ? orders.filter((order) => order.sessionId === session.id) : []
-        const presentation = tablePresentation(sessionOrders.map((order) => order.status))
-        const cards: BoardOrder[] = sessionOrders
-          .filter((order) => order.status !== 'cancelled')
-          .map((order) => ({
-            id: order.id,
-            publicNumber: order.publicNumber,
-            status: order.status,
-            totalCents: order.totalCents,
-            itemCount: order.items.reduce((sum, item) => sum + item.qty, 0),
-            readyAt: order.readyAt,
-            waitingSeconds:
-              order.status === 'ready_for_pickup' && order.readyAt
-                ? Math.max(0, Math.floor((nowMs - Date.parse(order.readyAt)) / 1000))
-                : null,
-            createdAt: order.createdAt,
-          }))
+        const visible = sessionOrders.filter((order) => order.status !== 'draft' && order.status !== 'cancelled')
+        const presentation = serviceTone(
+          visible.map((order) => ({ status: order.status, paid: Boolean(order.paidAt) })),
+          Boolean(session),
+        )
+        const cards: BoardOrder[] = visible.map((order) => ({
+          id: order.id,
+          publicNumber: order.publicNumber,
+          status: order.status,
+          totalCents: order.totalCents,
+          itemCount: order.items.reduce((sum, item) => sum + item.qty, 0),
+          paid: Boolean(order.paidAt),
+          readyAt: order.readyAt,
+          waitingSeconds: orderWaitSeconds(order.status, order.submittedAt, order.readyAt, nowMs),
+          createdAt: order.createdAt,
+        }))
         tables.push({
           number,
           tone: presentation.tone,
@@ -387,15 +386,16 @@ export function createMemoryStore(options: { staffPassword: string; tokenKey: st
           sessionId: session?.id ?? null,
           sessionOpenedAt: session?.openedAt ?? null,
           orders: cards,
-          action: presentation.tone === 'red' ? ('Scanner' as const) : ('Voir' as const),
+          action: 'Voir' as const,
         })
-        for (const order of sessionOrders) {
-          if (order.status !== 'ready_for_pickup' || !order.readyAt) continue
+        for (const order of visible) {
+          const waiting = orderWaitSeconds(order.status, order.submittedAt, order.readyAt, nowMs)
+          if (waiting == null) continue
           alerts.push({
             orderId: order.id,
             tableNumber: number,
             publicNumber: order.publicNumber,
-            waitingSeconds: Math.max(0, Math.floor((nowMs - Date.parse(order.readyAt)) / 1000)),
+            waitingSeconds: waiting,
           })
         }
       }
@@ -433,6 +433,35 @@ export function createMemoryStore(options: { staffPassword: string; tokenKey: st
       pushHistory(order, previous, 'staff')
       return { ok: true, value: staffView(order, nowMs) }
     },
+    async confirm(staffToken, orderId) {
+      if (!(await staffFromToken(staffToken))) return fail('unauthorized')
+      const order = orders.find((item) => item.id === orderId)
+      if (!order) return fail('not_found')
+      if (order.status === 'claimed') return { ok: true, value: staffView(order, Date.now()) }
+      if (!canTransition(order.status, 'claimed')) return fail('forbidden_transition')
+      const previous = order.status
+      order.status = 'claimed'
+      order.claimedAt = nowIso()
+      if (order.pickupStatus === 'active') order.pickupStatus = 'consumed'
+      pushHistory(order, previous, 'staff')
+      return { ok: true, value: staffView(order, Date.now()) }
+    },
+    async amend(staffToken, orderId, body) {
+      if (!(await staffFromToken(staffToken))) return fail('unauthorized')
+      const order = orders.find((item) => item.id === orderId)
+      if (!order) return fail('not_found')
+      if (order.status !== 'submitted' && order.status !== 'ready_for_pickup' && order.status !== 'claimed') {
+        return fail('forbidden_transition')
+      }
+      const parsed = parseStaffCart(body)
+      if ('error' in parsed) return fail(parsed.error)
+      const snapshot = snapshotCart(parsed.lines, parsed.note)
+      if ('error' in snapshot) return fail(snapshot.error)
+      order.items = snapshot.items
+      order.note = snapshot.note
+      order.totalCents = snapshot.totalCents
+      return { ok: true, value: staffView(order, Date.now()) }
+    },
     async complete(staffToken, orderId) {
       return changeStatus(staffToken, orderId, 'completed')
     },
@@ -452,6 +481,13 @@ export function createMemoryStore(options: { staffPassword: string; tokenKey: st
       const session = sessions.find((item) => item.id === sessionId)
       if (!session || session.status !== 'open') return fail('not_found')
       if (pending(session.id)) return fail('session_busy')
+      for (const order of orders) {
+        if (order.sessionId !== session.id || order.status !== 'claimed') continue
+        const previous = order.status
+        order.status = 'completed'
+        order.completedAt = nowIso()
+        pushHistory(order, previous, 'staff')
+      }
       session.status = 'closed'
       session.closedAt = nowIso()
       return { ok: true, value: { sessionId: session.id } }

@@ -1,11 +1,13 @@
 import {
   PICKUP_TTL_MS,
   canTransition,
+  orderWaitSeconds,
   parseCartPayload,
+  parseStaffCart,
   pickupPayload,
   readPickupToken,
+  serviceTone,
   snapshotCart,
-  tablePresentation,
   type OrderItem,
   type OrderStatus,
 } from '../lib/ordering/domain.ts'
@@ -136,10 +138,7 @@ export function createSupabaseStore(config: Config): OrderStore {
     const { data } = await call<HistoryDb[]>(
       `order_status_history?order_id=eq.${row.id}&select=from_status,to_status,actor,created_at&order=created_at.asc`,
     )
-    const waiting =
-      row.status === 'ready_for_pickup' && row.ready_at
-        ? Math.max(0, Math.floor((nowMs - Date.parse(row.ready_at)) / 1000))
-        : null
+    const waiting = orderWaitSeconds(row.status, row.submitted_at, row.ready_at, nowMs)
     return {
       id: row.id,
       publicNumber: row.public_number,
@@ -289,7 +288,7 @@ export function createSupabaseStore(config: Config): OrderStore {
       const session = await sessionById(device.session_id)
       if (!session) return fail('unauthorized')
       const { data } = await call<OrderRow[]>(
-        `orders?device_id=eq.${device.id}&select=*,order_items(*)&order=created_at.asc`,
+        `orders?session_id=eq.${session.id}&select=*,order_items(*)&order=created_at.asc`,
       )
       const orders: ClientOrder[] = []
       for (const row of data) orders.push(await clientView(row))
@@ -459,7 +458,7 @@ export function createSupabaseStore(config: Config): OrderStore {
       const orderRows = ids.length
         ? (
             await call<OrderRow[]>(
-              `orders?session_id=in.(${ids.join(',')})&select=id,public_number,table_number,session_id,status,total_cents,ready_at,created_at,order_items(qty)`,
+              `orders?session_id=in.(${ids.join(',')})&select=id,public_number,table_number,session_id,status,total_cents,paid_at,submitted_at,ready_at,created_at,order_items(qty)`,
             )
           ).data
         : []
@@ -468,37 +467,38 @@ export function createSupabaseStore(config: Config): OrderStore {
       for (let number = 1; number <= tableCount; number += 1) {
         const session = sessions.data.find((item) => item.table_number === number)
         const sessionOrders = session ? orderRows.filter((order) => order.session_id === session.id) : []
-        const presentation = tablePresentation(sessionOrders.map((order) => order.status))
+        const visible = sessionOrders.filter((order) => order.status !== 'draft' && order.status !== 'cancelled')
+        const presentation = serviceTone(
+          visible.map((order) => ({ status: order.status, paid: Boolean(order.paid_at) })),
+          Boolean(session),
+        )
         tables.push({
           number,
           tone: presentation.tone,
           label: presentation.label,
           sessionId: session?.id ?? null,
           sessionOpenedAt: session?.opened_at ?? null,
-          action: presentation.tone === 'red' ? ('Scanner' as const) : ('Voir' as const),
-          orders: sessionOrders
-            .filter((order) => order.status !== 'cancelled')
-            .map((order) => ({
-              id: order.id,
-              publicNumber: order.public_number,
-              status: order.status,
-              totalCents: order.total_cents,
-              itemCount: (order.order_items ?? []).reduce((sum, item) => sum + item.qty, 0),
-              readyAt: order.ready_at,
-              createdAt: order.created_at,
-              waitingSeconds:
-                order.status === 'ready_for_pickup' && order.ready_at
-                  ? Math.max(0, Math.floor((nowMs - Date.parse(order.ready_at)) / 1000))
-                  : null,
-            })),
+          action: 'Voir' as const,
+          orders: visible.map((order) => ({
+            id: order.id,
+            publicNumber: order.public_number,
+            status: order.status,
+            totalCents: order.total_cents,
+            itemCount: (order.order_items ?? []).reduce((sum, item) => sum + item.qty, 0),
+            paid: Boolean(order.paid_at),
+            readyAt: order.ready_at,
+            createdAt: order.created_at,
+            waitingSeconds: orderWaitSeconds(order.status, order.submitted_at, order.ready_at, nowMs),
+          })),
         })
-        for (const order of sessionOrders) {
-          if (order.status !== 'ready_for_pickup' || !order.ready_at) continue
+        for (const order of visible) {
+          const waiting = orderWaitSeconds(order.status, order.submitted_at, order.ready_at, nowMs)
+          if (waiting == null) continue
           alerts.push({
             orderId: order.id,
             tableNumber: number,
             publicNumber: order.public_number,
-            waitingSeconds: Math.max(0, Math.floor((nowMs - Date.parse(order.ready_at)) / 1000)),
+            waitingSeconds: waiting,
           })
         }
       }
@@ -546,6 +546,88 @@ export function createSupabaseStore(config: Config): OrderStore {
       }
       return { ok: true, value: await staffView(row, nowMs) }
     },
+    async confirm(staffToken, orderId) {
+      if (!(await requireStaff(staffToken))) return fail('unauthorized')
+      const row = await loadOrder(orderId)
+      if (!row) return fail('not_found')
+      if (row.status === 'claimed') return { ok: true, value: await staffView(row, Date.now()) }
+      if (!canTransition(row.status, 'claimed')) return fail('forbidden_transition')
+      const patch: Record<string, string> = {
+        status: 'claimed',
+        claimed_at: new Date().toISOString(),
+        last_actor: 'staff',
+      }
+      if (row.pickup_status === 'active') patch.pickup_status = 'consumed'
+      try {
+        await call(`orders?id=eq.${orderId}&status=eq.${row.status}`, { method: 'PATCH', body: JSON.stringify(patch) }, 'return=minimal')
+      } catch {
+        if (row.status !== 'submitted') return fail('forbidden_transition')
+        const readyAt = new Date().toISOString()
+        try {
+          await call(
+            `orders?id=eq.${orderId}&status=eq.submitted`,
+            { method: 'PATCH', body: JSON.stringify({ status: 'ready_for_pickup', ready_at: readyAt, last_actor: 'staff' }) },
+            'return=minimal',
+          )
+          await call(
+            `orders?id=eq.${orderId}&status=eq.ready_for_pickup`,
+            { method: 'PATCH', body: JSON.stringify(patch) },
+            'return=minimal',
+          )
+        } catch {
+          return fail('forbidden_transition')
+        }
+      }
+      const next = await loadOrder(orderId)
+      if (!next) return fail('not_saved')
+      return { ok: true, value: await staffView(next, Date.now()) }
+    },
+    async amend(staffToken, orderId, body) {
+      if (!(await requireStaff(staffToken))) return fail('unauthorized')
+      const row = await loadOrder(orderId)
+      if (!row) return fail('not_found')
+      if (row.status !== 'submitted' && row.status !== 'ready_for_pickup' && row.status !== 'claimed') {
+        return fail('forbidden_transition')
+      }
+      const parsed = parseStaffCart(body)
+      if ('error' in parsed) return fail(parsed.error)
+      const snapshot = snapshotCart(parsed.lines, parsed.note)
+      if ('error' in snapshot) return fail(snapshot.error)
+      await call(`order_items?order_id=eq.${orderId}`, { method: 'DELETE' }, 'return=minimal')
+      await call(
+        'order_items',
+        {
+          method: 'POST',
+          body: JSON.stringify(
+            snapshot.items.map((item, position) => ({
+              order_id: orderId,
+              position,
+              dish_id: item.dishId,
+              name: item.name,
+              qty: item.qty,
+              unit_cents: item.unitCents,
+              supplement_qty: item.supplementQty,
+              supplement_label: item.supplementLabel,
+              supplement_cents: item.supplementCents,
+              line_cents: item.lineCents,
+              note: item.note,
+            })),
+          ),
+        },
+        'return=minimal',
+      )
+      await call(
+        `orders?id=eq.${orderId}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ note: snapshot.note, total_cents: snapshot.totalCents, last_actor: 'staff' }),
+        },
+        'return=minimal',
+      )
+      const next = await loadOrder(orderId)
+      if (!next) return fail('not_saved')
+      return { ok: true, value: await staffView(next, Date.now()) }
+    },
     async complete(staffToken, orderId) {
       return transition(staffToken, orderId, 'completed')
     },
@@ -569,6 +651,19 @@ export function createSupabaseStore(config: Config): OrderStore {
       const session = await sessionById(sessionId)
       if (!session || session.status !== 'open') return fail('not_found')
       if (await pending(session.id)) return fail('session_busy')
+      try {
+        await call(
+          `orders?session_id=eq.${sessionId}&status=eq.claimed`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify({ status: 'completed', completed_at: new Date().toISOString(), last_actor: 'staff' }),
+          },
+          'return=minimal',
+        )
+      } catch (error) {
+        const status = error instanceof Error && 'status' in error ? Number((error as { status: number }).status) : 0
+        if (status !== 404) return fail('not_saved')
+      }
       await call(
         `table_sessions?id=eq.${sessionId}&status=eq.open`,
         { method: 'PATCH', body: JSON.stringify({ status: 'closed', closed_at: new Date().toISOString() }) },

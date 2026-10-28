@@ -43,6 +43,7 @@ export type BoardOrder = {
   status: OrderStatus
   totalCents: number
   itemCount: number
+  paid: boolean
   readyAt: string | null
   waitingSeconds: number | null
   createdAt: string
@@ -95,6 +96,8 @@ export interface OrderStore {
   clientOrders(deviceToken: string): Promise<StoreResult<{ tableNumber: number; sessionStatus: 'open' | 'closed'; orders: ClientOrder[] }>>
   submit(deviceToken: string, body: unknown): Promise<StoreResult<ClientOrder>>
   ready(deviceToken: string, orderId: string): Promise<StoreResult<ClientOrder>>
+  confirm(staffToken: string, orderId: string): Promise<StoreResult<StaffOrder>>
+  amend(staffToken: string, orderId: string, body: unknown): Promise<StoreResult<StaffOrder>>
   login(password: string, ip: string): Promise<StoreResult<{ token: string }>>
   logout(staffToken: string): Promise<StoreResult<{ done: true }>>
   board(staffToken: string, nowMs: number): Promise<StoreResult<Board>>

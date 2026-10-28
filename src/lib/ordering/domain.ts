@@ -14,16 +14,16 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number]
 
 export const statusLabel: Record<OrderStatus, string> = {
   draft: 'Brouillon',
-  submitted: 'Envoyée',
-  ready_for_pickup: 'À récupérer',
-  claimed: 'Récupérée',
+  submitted: 'À confirmer',
+  ready_for_pickup: 'À confirmer',
+  claimed: 'En service',
   completed: 'Clôturée',
   cancelled: 'Annulée',
 }
 
 const transitions: Record<OrderStatus, readonly OrderStatus[]> = {
   draft: ['submitted', 'cancelled'],
-  submitted: ['ready_for_pickup', 'cancelled'],
+  submitted: ['ready_for_pickup', 'claimed', 'cancelled'],
   ready_for_pickup: ['claimed', 'cancelled'],
   claimed: ['completed', 'cancelled'],
   completed: [],
@@ -37,20 +37,51 @@ export function canTransition(from: OrderStatus, to: OrderStatus): boolean {
 export type Tone = 'grey' | 'blue' | 'red' | 'orange' | 'green'
 
 export const legend: Array<{ tone: Tone; label: string; text: string }> = [
-  { tone: 'grey', label: 'Disponible', text: 'Aucune commande en attente' },
-  { tone: 'blue', label: 'En cours', text: 'Le client est en train de commander' },
-  { tone: 'red', label: 'À récupérer', text: 'Le client a terminé et attend le restaurant' },
-  { tone: 'orange', label: 'Récupérée', text: 'Commande récupérée, encore à traiter' },
-  { tone: 'green', label: 'Clôturée', text: 'Commande clôturée par le restaurant' },
+  { tone: 'grey', label: 'Libre', text: 'Aucun téléphone relié à la table' },
+  { tone: 'blue', label: 'Occupée', text: 'Des téléphones sont reliés, rien n’est encore confirmé' },
+  { tone: 'red', label: 'À confirmer', text: 'Le client a confirmé, la salle doit valider' },
+  { tone: 'orange', label: 'En service', text: 'Commande confirmée, à préparer' },
+  { tone: 'green', label: 'Payée', text: 'Encaissée, la table peut être clôturée' },
 ]
 
-export function tablePresentation(statuses: OrderStatus[]): { tone: Tone; label: string } {
-  const active = statuses.filter((status) => status !== 'cancelled')
-  if (active.includes('ready_for_pickup')) return { tone: 'red', label: 'À récupérer' }
-  if (active.includes('claimed')) return { tone: 'orange', label: 'Récupérée' }
-  if (active.includes('draft') || active.includes('submitted')) return { tone: 'blue', label: 'En cours' }
-  if (active.includes('completed')) return { tone: 'green', label: 'Clôturée' }
-  return { tone: 'grey', label: 'Disponible' }
+export function serviceTone(
+  orders: Array<{ status: OrderStatus; paid: boolean }>,
+  occupied = false,
+): { tone: Tone; label: string } {
+  const live = orders.filter((order) => order.status !== 'cancelled' && order.status !== 'draft')
+  const active = live.filter((order) => order.status !== 'completed')
+  if (active.some((order) => order.status === 'submitted' || order.status === 'ready_for_pickup')) {
+    return { tone: 'red', label: 'À confirmer' }
+  }
+  if (active.some((order) => order.status === 'claimed' && !order.paid)) {
+    return { tone: 'orange', label: 'En service' }
+  }
+  if (active.some((order) => order.status === 'claimed' && order.paid)) {
+    return { tone: 'green', label: 'Payée' }
+  }
+  if (live.some((order) => order.status === 'completed')) return { tone: 'green', label: 'Clôturée' }
+  if (occupied) return { tone: 'blue', label: 'Occupée' }
+  return { tone: 'grey', label: 'Libre' }
+}
+
+export function tablePresentation(statuses: OrderStatus[], occupied = false): { tone: Tone; label: string } {
+  return serviceTone(
+    statuses.map((status) => ({ status, paid: false })),
+    occupied,
+  )
+}
+
+export function orderWaitSeconds(
+  status: OrderStatus,
+  submittedAt: string | null,
+  readyAt: string | null,
+  nowMs: number,
+): number | null {
+  const stamp = status === 'submitted' ? submittedAt : status === 'ready_for_pickup' ? (readyAt ?? submittedAt) : null
+  if (!stamp) return null
+  const ms = Date.parse(stamp)
+  if (Number.isNaN(ms)) return null
+  return Math.max(0, Math.floor((nowMs - ms) / 1000))
 }
 
 export function waitingLabel(seconds: number): string {
@@ -95,6 +126,17 @@ export function cleanNote(value: unknown, max = NOTE_MAX): string {
   return value.replace(/\s+/g, ' ').trim().slice(0, max)
 }
 
+export function parseStaffCart(raw: unknown): { lines: CartLine[]; note: string } | { error: 'empty' | 'invalid' } {
+  if (!raw || typeof raw !== 'object') return { error: 'invalid' }
+  const body = raw as Record<string, unknown>
+  const note = cleanNote(body.note, ORDER_NOTE_MAX)
+  if (!Array.isArray(body.lines)) return { error: 'invalid' }
+  if (body.lines.length === 0) return { error: 'empty' }
+  const lines = readLines(body.lines)
+  if (!lines) return { error: 'invalid' }
+  return { lines, note }
+}
+
 export function parseCartPayload(
   raw: unknown,
 ): { lines: CartLine[]; note: string; clientRequestId: string } | { error: 'empty' | 'invalid' } {
@@ -106,21 +148,28 @@ export function parseCartPayload(
     return { error: 'invalid' }
   }
   if (!Array.isArray(body.lines)) return { error: 'invalid' }
-  if (body.lines.length === 0) return { error: 'empty' }
-  if (body.lines.length > 40) return { error: 'invalid' }
+  const lines = readLines(body.lines)
+  if (!lines) return { error: 'invalid' }
+  if (lines.length === 0) return { error: 'empty' }
+  return { lines, note, clientRequestId }
+}
+
+function readLines(entries: unknown[]): CartLine[] | null {
+  if (entries.length === 0) return []
+  if (entries.length > 40) return null
   const lines: CartLine[] = []
-  for (const entry of body.lines) {
-    if (!entry || typeof entry !== 'object') return { error: 'invalid' }
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') return null
     const row = entry as Record<string, unknown>
-    if (typeof row.dishId !== 'string' || !/^[a-z0-9-]{2,48}$/.test(row.dishId)) return { error: 'invalid' }
-    if (!Number.isInteger(row.qty)) return { error: 'invalid' }
+    if (typeof row.dishId !== 'string' || !/^[a-z0-9-]{2,48}$/.test(row.dishId)) return null
+    if (!Number.isInteger(row.qty)) return null
     const supplementQty = Number.isInteger(row.supplementQty) ? (row.supplementQty as number) : 0
     const line: CartLine = { dishId: row.dishId, qty: row.qty as number, supplementQty }
     const itemNote = cleanNote(row.note)
     if (itemNote) line.note = itemNote
     lines.push(line)
   }
-  return { lines, note, clientRequestId }
+  return lines
 }
 
 export function snapshotCart(lines: CartLine[], note: string): { items: OrderItem[]; totalCents: number; note: string } | { error: 'empty' } {

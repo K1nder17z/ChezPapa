@@ -23,10 +23,14 @@ export function OrderSheet() {
         <h2>Votre commande</h2>
         <Rule />
       </header>
-      <p className="order-table">{table ? `Table ${table}` : 'Scannez le QR code de votre table pour commander.'}</p>
+      <p className="order-table">
+        {table
+          ? `Table ${table}. Les autres téléphones de cette table partagent la même addition.`
+          : 'Scannez le QR code de votre table pour commander.'}
+      </p>
       {table && priced.lines.length > 0 ? (
         <a className="order-go" href="/ma-commande" data-order-go>
-          Valider la commande
+          Confirmer la commande
         </a>
       ) : null}
       {table ? (
