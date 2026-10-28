@@ -92,7 +92,7 @@ export type StoreResult<T> = StoreSuccess<T> | StoreFailure
 
 export interface OrderStore {
   kind: 'memory' | 'supabase'
-  openDevice(tableNumber: number, deviceToken: string | null): Promise<StoreResult<{ deviceToken: string; tableNumber: number; sessionId: string }>>
+  openDevice(tableNumber: number, deviceToken: string | null, renew?: boolean): Promise<StoreResult<{ deviceToken: string; tableNumber: number; sessionId: string }>>
   clientOrders(deviceToken: string): Promise<StoreResult<{ tableNumber: number; sessionStatus: 'open' | 'closed'; orders: ClientOrder[] }>>
   submit(deviceToken: string, body: unknown): Promise<StoreResult<ClientOrder>>
   ready(deviceToken: string, orderId: string): Promise<StoreResult<ClientOrder>>

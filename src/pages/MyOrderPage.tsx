@@ -47,6 +47,7 @@ export function MyOrderPage() {
   const [pending, setPending] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [askReview, setAskReview] = useState<string | null>(reviewTarget)
+  const [closed, setClosed] = useState(false)
 
   useEffect(() => {
     document.title = 'Votre commande — Chez Papa'
@@ -60,25 +61,27 @@ export function MyOrderPage() {
     let cancel = false
     let timer = 0
     const pull = async () => {
-      const session = await ensureDevice(table)
-      if (cancel) return
-      if (!session.ok) {
-        setOffline(session.offline)
-        setMessage(session.message)
+      const token = deviceToken()
+      if (!token) {
         setLoaded(true)
         return
       }
-      const listed = await apiSend<{ orders: ClientOrder[] }>('/api/client/orders', { token: deviceToken() })
+      const listed = await apiSend<{ orders: ClientOrder[]; sessionStatus: 'open' | 'closed' }>('/api/client/orders', {
+        token,
+      })
       if (cancel) return
       if (!listed.ok) {
         setOffline(listed.offline)
         setMessage(listed.message)
-      } else {
-        setOrders(listed.data.orders)
-        setMessage('')
-        setOffline(false)
+        setLoaded(true)
+        return
       }
+      setOrders(listed.data.orders)
+      setMessage('')
+      setOffline(false)
+      setClosed(listed.data.sessionStatus === 'closed')
       setLoaded(true)
+      if (listed.data.sessionStatus === 'closed') return
       timer = window.setTimeout(() => void pull(), 4000)
     }
     void pull()
@@ -161,6 +164,7 @@ export function MyOrderPage() {
             {message}
           </p>
         ) : null}
+        {closed ? <p>Le restaurant a clôturé cette table.</p> : null}
         {reviewing ? (
           <section className="review-ask">
             <p className="kicker">Merci</p>
@@ -212,7 +216,7 @@ export function MyOrderPage() {
             </p>
           </section>
         ))}
-        {table && loaded ? (
+        {table && loaded && !closed ? (
           <section className="cart-editor">
             {visible.length > 0 ? <h2>Ajouter à la table</h2> : null}
             {priced.lines.length === 0 ? (

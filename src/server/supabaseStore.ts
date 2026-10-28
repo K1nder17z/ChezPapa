@@ -260,7 +260,7 @@ export function createSupabaseStore(config: Config): OrderStore {
   return {
     kind: 'supabase',
     tableCount: countTables,
-    async openDevice(tableNumber, deviceToken) {
+    async openDevice(tableNumber, deviceToken, renew = false) {
       const max = await countTables()
       if (!Number.isInteger(tableNumber) || tableNumber < 1 || tableNumber > max) return fail('invalid_table')
       const known = await deviceByToken(deviceToken)
@@ -269,6 +269,7 @@ export function createSupabaseStore(config: Config): OrderStore {
         if (session?.status === 'open') {
           return { ok: true, value: { deviceToken, tableNumber, sessionId: session.id } }
         }
+        if (!renew) return fail('session_closed')
       }
       const session = await ensureOpen(tableNumber)
       const token = randomToken('dev')

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { formatEuro } from '../../lib/format.ts'
 import { apiSend, staffToken } from '../../lib/ordering/client.ts'
@@ -14,23 +14,25 @@ export function TablePage() {
   const [message, setMessage] = useState('')
   const [askClose, setAskClose] = useState(false)
   const [askPay, setAskPay] = useState(false)
+  const requestId = useRef(0)
 
   useEffect(() => {
     document.title = `Table ${table} — Chez Papa`
     let stop = false
     const pull = async () => {
+      const id = ++requestId.current
       const result = await apiSend<Board>('/api/staff/board', { token: staffToken() })
-      if (stop) return
+      if (stop || id !== requestId.current) return
       if (!result.ok) {
         setMessage(result.message)
         return
       }
       setBoard(result.data)
-      const current = result.data.tables.find((item) => item.number === number)
+      const found = result.data.tables.find((item) => item.number === number)
       const details = await Promise.all(
-        (current?.orders ?? []).map((order) => apiSend<StaffOrder>(`/api/staff/orders/${order.id}`, { token: staffToken() })),
+        (found?.orders ?? []).map((order) => apiSend<StaffOrder>(`/api/staff/orders/${order.id}`, { token: staffToken() })),
       )
-      if (stop) return
+      if (stop || id !== requestId.current) return
       setOrders(details.flatMap((item) => (item.ok ? [item.data] : [])))
       setMessage('')
     }
@@ -66,16 +68,36 @@ export function TablePage() {
 
   async function closeSession() {
     setAskClose(false)
-    if (!current?.sessionId) {
+    const sessionId = current?.sessionId
+    if (!sessionId) {
       setMessage('Cette table n’a pas de service ouvert.')
       return
     }
-    const result = await apiSend('/api/staff/sessions/' + current.sessionId + '/close', {
+    requestId.current += 1
+    const result = await apiSend('/api/staff/sessions/' + sessionId + '/close', {
       method: 'POST',
       token: staffToken(),
       body: {},
     })
-    setMessage(result.ok ? 'Table clôturée.' : result.message)
+    if (!result.ok) {
+      setMessage(result.message)
+      return
+    }
+    requestId.current += 1
+    setOrders([])
+    setBoard((previous) =>
+      previous
+        ? {
+            ...previous,
+            tables: previous.tables.map((item) =>
+              item.number === number
+                ? { ...item, sessionId: null, sessionOpenedAt: null, tone: 'grey', label: 'Libre', orders: [] }
+                : item,
+            ),
+          }
+        : previous,
+    )
+    setMessage('Table clôturée.')
   }
 
   return (

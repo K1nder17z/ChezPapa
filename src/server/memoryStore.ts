@@ -225,14 +225,15 @@ export function createMemoryStore(options: { staffPassword: string; tokenKey: st
     async tableCount() {
       return tableCount
     },
-    async openDevice(tableNumber, deviceToken) {
+    async openDevice(tableNumber, deviceToken, renew = false) {
       if (!Number.isInteger(tableNumber) || tableNumber < 1 || tableNumber > tableCount) return fail('invalid_table')
       const known = await deviceFromToken(deviceToken)
-      if (known && known.tableNumber === tableNumber) {
+      if (known && known.tableNumber === tableNumber && deviceToken) {
         const session = sessionOf(known)
-        if (session?.status === 'open' && deviceToken) {
+        if (session?.status === 'open') {
           return { ok: true, value: { deviceToken, tableNumber, sessionId: session.id } }
         }
+        if (!renew) return fail('session_closed')
       }
       const session = ensureOpen(tableNumber)
       const token = randomToken('dev')

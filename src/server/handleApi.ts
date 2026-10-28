@@ -39,8 +39,9 @@ async function route(request: Request, url: URL, store: OrderStore): Promise<Res
   if (method === 'POST' && parts[1] === 'client' && parts[2] === 'session' && parts.length === 3) {
     const body = await readBody(request)
     const tableNumber = body && typeof body === 'object' ? (body as { tableNumber?: unknown }).tableNumber : null
+    const renew = Boolean(body && typeof body === 'object' && (body as { renew?: unknown }).renew === true)
     if (typeof tableNumber !== 'number') return fail('invalid_table')
-    return send(await store.openDevice(tableNumber, bearer))
+    return send(await store.openDevice(tableNumber, bearer, renew))
   }
   if (method === 'GET' && parts[1] === 'client' && parts[2] === 'orders' && parts.length === 3) {
     if (!bearer) return fail('unauthorized')

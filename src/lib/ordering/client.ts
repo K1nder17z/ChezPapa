@@ -102,12 +102,12 @@ export function saveDeviceToken(token: string) {
   localStorage.setItem(DEVICE_KEY, token)
 }
 
-export async function ensureDevice(tableNumber: number) {
+export async function ensureDevice(tableNumber: number, renew = false) {
   rememberTable(tableNumber)
   const result = await apiSend<{ deviceToken: string }>('/api/client/session', {
     method: 'POST',
     token: deviceToken(),
-    body: { tableNumber },
+    body: { tableNumber, renew },
   })
   if (result.ok) saveDeviceToken(result.data.deviceToken)
   return result

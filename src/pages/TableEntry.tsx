@@ -10,7 +10,7 @@ export function TableEntry() {
 
   useEffect(() => {
     if (!valid) return
-    void ensureDevice(number)
+    void ensureDevice(number, true)
   }, [number, valid])
 
   if (!valid) {
