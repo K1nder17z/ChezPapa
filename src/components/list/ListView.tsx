@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom'
+import { restaurant } from '../../config/restaurant.ts'
 import { categories } from '../../data/menu.ts'
 import { DishList } from '../menu/DishList.tsx'
 import { Rule } from '../brand/Ornaments.tsx'
+import { GoogleStars } from '../review/GoogleStars.tsx'
 
 export function ListView({
   reducedMotion,
@@ -47,10 +49,11 @@ export function ListView({
           Allergènes selon la recette habituelle. En cas d’allergie, prévenez la maison avant de commander.
         </p>
         <p className="list-note">
-          Les photographies sont des illustrations détourées. Elles ne montrent pas le dressage exact de Chez Papa.
+          Les images sont des illustrations détourées. Elles ne montrent pas le dressage exact de Chez Papa.
         </p>
+        {restaurant.reviewsUrl ? <GoogleStars url={restaurant.reviewsUrl} /> : null}
         <p className="list-note">
-          <Link to="/credits">Crédits photographiques</Link>
+          <Link to="/credits">Illustrations</Link>
         </p>
       </div>
     </div>

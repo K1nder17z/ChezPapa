@@ -5,6 +5,7 @@ export type BookSheet =
   | { id: string; kind: 'welcome'; label: string }
   | { id: string; kind: 'toc'; label: string }
   | { id: string; kind: 'category'; label: string; categoryId: string }
+  | { id: string; kind: 'order'; label: string }
   | { id: string; kind: 'closing'; label: string }
 
 export function buildSheets(categories: Category[]): BookSheet[] {
@@ -18,6 +19,7 @@ export function buildSheets(categories: Category[]): BookSheet[] {
       label: category.title,
       categoryId: category.id,
     })),
+    { id: 'order', kind: 'order', label: 'Commande' },
     { id: 'closing', kind: 'closing', label: 'Merci' },
   ]
 }

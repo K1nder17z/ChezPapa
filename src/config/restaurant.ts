@@ -59,14 +59,3 @@ export const restaurant = {
   facebook: optionalUrl(import.meta.env.VITE_RESTAURANT_FACEBOOK),
 }
 
-export function hasContactDetails(): boolean {
-  return Boolean(
-    restaurant.address ||
-      restaurant.phone ||
-      restaurant.hours ||
-      restaurant.mapsUrl ||
-      restaurant.reviewsUrl ||
-      restaurant.instagram ||
-      restaurant.facebook,
-  )
-}

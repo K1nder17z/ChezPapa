@@ -7,18 +7,22 @@ export function TopBar({
   view,
   fullscreenEnabled,
   fullscreen,
+  orderCount,
   onSommaire,
   onToggleView,
   onFullscreen,
   onClose,
+  onOrder,
 }: {
   view: 'book' | 'list'
   fullscreenEnabled: boolean
   fullscreen: boolean
+  orderCount: number
   onSommaire: () => void
   onToggleView: () => void
   onFullscreen: () => void
   onClose: () => void
+  onOrder: () => void
 }) {
   return (
     <header className="topbar">
@@ -27,6 +31,9 @@ export function TopBar({
         <span>Chez Papa</span>
       </p>
       <div className="top-actions">
+        <button type="button" onClick={onOrder}>
+          Commande{orderCount > 0 ? ` ${orderCount}` : ''}
+        </button>
         <button type="button" onClick={onSommaire}>
           Sommaire
         </button>
@@ -116,6 +123,15 @@ export function Sommaire({
               </li>
             )
           })}
+          <li>
+            <button
+              type="button"
+              onClick={() => onSelect(sheets.findIndex((sheet) => sheet.kind === 'order'))}
+            >
+              <span>Votre commande</span>
+              <span>{sheets.findIndex((sheet) => sheet.kind === 'order') + 1}</span>
+            </button>
+          </li>
         </ul>
       </div>
     </div>

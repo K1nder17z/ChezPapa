@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Arch } from '../components/brand/Ornaments.tsx'
 import { BookSheets } from '../components/book/BookSheets.tsx'
 import { FlipBook, type BookHandle, type BookStatus } from '../components/book/FlipBook.tsx'
@@ -6,7 +6,10 @@ import { IntroScreen } from '../components/intro/IntroScreen.tsx'
 import { ListView } from '../components/list/ListView.tsx'
 import { BottomBar, Sommaire, TopBar } from '../components/nav/Chrome.tsx'
 import { categories } from '../data/menu.ts'
+import { cartCount } from '../lib/cart.ts'
+import { installCartClicks, useCartLines } from '../lib/cartStore.ts'
 import { buildSheets, categoryPageIndex } from '../lib/sheets.ts'
+import { syncBookDom } from '../components/book/syncBookDom.ts'
 
 const SKIP_KEY = 'chezpapa-skip-intro'
 
@@ -99,6 +102,8 @@ export function MenuExperience() {
   const shellRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<number | null>(null)
+  const [bookEpoch, setBookEpoch] = useState(0)
+  const orderCount = cartCount(useCartLines())
   const readingBook = phase === 'reading' && view === 'book'
   const size = useStageSize(readingBook, stageRef)
   const fullscreenEnabled = typeof document !== 'undefined' && document.fullscreenEnabled
@@ -147,6 +152,11 @@ export function MenuExperience() {
     return () => window.removeEventListener('keydown', onKey)
   }, [phase, sommaireOpen, view])
 
+  useEffect(() => {
+    if (phase !== 'reading') return
+    return installCartClicks()
+  }, [phase])
+
   function openBook() {
     setEntryPage(1)
     setView('book')
@@ -188,6 +198,18 @@ export function MenuExperience() {
     setPhase('reading')
   }
 
+  function goOrder() {
+    const index = Math.max(0, sheets.findIndex((sheet) => sheet.kind === 'order'))
+    setSommaireOpen(false)
+    if (view === 'book' && phase === 'reading') {
+      bookRef.current?.goTo(index)
+      return
+    }
+    setEntryPage(index)
+    setView('book')
+    setPhase('reading')
+  }
+
   async function toggleFullscreen() {
     const node = shellRef.current
     if (!node || !document.fullscreenEnabled) return
@@ -210,6 +232,7 @@ export function MenuExperience() {
         view={view}
         fullscreenEnabled={fullscreenEnabled}
         fullscreen={fullscreen}
+        orderCount={orderCount}
         onSommaire={() => setSommaireOpen(true)}
         onToggleView={() => {
           setSommaireOpen(false)
@@ -217,7 +240,9 @@ export function MenuExperience() {
         }}
         onFullscreen={() => void toggleFullscreen()}
         onClose={closeBook}
+        onOrder={goOrder}
       />
+      <CartSync epoch={bookEpoch} />
       {view === 'book' ? (
         <>
           <div className="stage" ref={stageRef}>
@@ -230,6 +255,7 @@ export function MenuExperience() {
               startPage={entryPage}
               reducedMotion={reduced}
               onStatus={onStatus}
+              onReady={() => setBookEpoch((value) => value + 1)}
             >
               <BookSheets sheets={sheets} />
             </FlipBook>
@@ -252,4 +278,12 @@ export function MenuExperience() {
       ) : null}
     </div>
   )
+}
+
+function CartSync({ epoch }: { epoch: number }) {
+  const lines = useCartLines()
+  useLayoutEffect(() => {
+    syncBookDom()
+  }, [epoch, lines])
+  return null
 }

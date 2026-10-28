@@ -17,7 +17,8 @@ export const categories: Category[] = [
     title: 'Nos entrées',
     kicker: 'Entrées',
     intro: 'Pour ouvrir le repas.',
-    layout: 'editorial',
+    layout: 'feature',
+    photo: 'entrees',
     dishes: [
       dish('zaalouk', 'Zaalouk', 750, 'Aubergine, tomate, ail, cumin', 'aucun'),
       dish('salade-chef', 'Salade du chef', 750, 'Laitue, tomate, thon, œuf, olives', 'poisson, œuf'),
@@ -69,7 +70,8 @@ export const categories: Category[] = [
     title: 'Nos spécialités marocaines',
     kicker: 'Spécialités',
     intro: 'Les classiques, sous leur nom.',
-    layout: 'editorial',
+    layout: 'feature',
+    photo: 'specialites',
     dishes: [
       dish('tripes', 'Tripes (douara)', 1100, 'Tripes, pois chiches, tomate, cumin', 'aucun'),
       dish('pied-veau', 'Pied de veau (kar3ine)', 1300, 'Pied de veau, pois chiches, ail, épices', 'aucun'),
@@ -111,7 +113,8 @@ export const categories: Category[] = [
     title: 'Nos snacks',
     kicker: 'Snacks',
     intro: 'Pour une faim plus rapide.',
-    layout: 'editorial',
+    layout: 'feature',
+    photo: 'snacks',
     dishes: [
       dish('shawarma', 'Shawarma + frites', 800, 'Pain, viande, crudités, sauce, frites', 'gluten, œuf, lait, sésame'),
       dish(
@@ -183,7 +186,8 @@ export const categories: Category[] = [
     title: 'Nos desserts',
     kicker: 'Desserts',
     intro: 'Pour finir.',
-    layout: 'editorial',
+    layout: 'feature',
+    photo: 'tiramisu',
     dishes: [
       dish('tiramisu', 'Tiramisu', 250, 'Mascarpone, biscuits, œufs, café', 'gluten, œuf, lait'),
     ],

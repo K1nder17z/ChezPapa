@@ -4,7 +4,7 @@ import { photoList } from '../data/photos.ts'
 
 export function CreditsPage() {
   useEffect(() => {
-    document.title = 'Crédits photographiques — Chez Papa'
+    document.title = 'Illustrations — Chez Papa'
     return () => {
       document.title = 'Chez Papa — Cuisine traditionnelle marocaine'
     }
@@ -14,11 +14,11 @@ export function CreditsPage() {
     <main className="credits-page">
       <article>
         <p className="kicker">Illustrations</p>
-        <h1>Crédits photographiques</h1>
+        <h1>Illustrations de la carte</h1>
         <p>
-          Ces images suggèrent le type de plat. Ce ne sont pas des photographies du service de Chez
-          Papa. Remplacez les fichiers du dossier <code>public/photos</code> pour utiliser les photos
-          du restaurant.
+          Ces images ont été générées pour suggérer le type de plat. Ce ne sont pas des photographies
+          du service de Chez Papa. Remplacez les fichiers du dossier <code>public/photos</code> pour
+          utiliser les photos du restaurant.
         </p>
         <ul>
           {photoList.map((photo) => (
@@ -26,22 +26,10 @@ export function CreditsPage() {
               <img src={photo.src} alt="" />
               <div>
                 <strong>{photo.caption}</strong>
-                <span>
-                  {photo.author} —{' '}
-                  {photo.licenseUrl ? (
-                    <a href={photo.licenseUrl}>{photo.license}</a>
-                  ) : (
-                    photo.license
-                  )}
-                </span>
-                <a href={photo.sourceUrl}>{photo.fileName}</a>
               </div>
             </li>
           ))}
         </ul>
-        <p>
-          Sources : <a href="https://commons.wikimedia.org/">Wikimedia Commons</a>.
-        </p>
         <Link to="/menu">Retour à la carte</Link>
       </article>
     </main>

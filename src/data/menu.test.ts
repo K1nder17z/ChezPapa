@@ -80,9 +80,10 @@ describe('carte Chez Papa', () => {
 
   it('calcule les pages du sommaire à partir du catalogue', () => {
     const sheets = buildSheets(categories)
-    expect(sheets).toHaveLength(categories.length + 4)
+    expect(sheets).toHaveLength(categories.length + 5)
+    expect(sheets.at(-2)?.kind).toBe('order')
     expect(categoryPageIndex(sheets, 'couscous')).toBeGreaterThan(categoryPageIndex(sheets, 'entrees'))
-    expect(categoryPageIndex(sheets, 'desserts')).toBe(sheets.length - 2)
+    expect(categoryPageIndex(sheets, 'desserts')).toBe(sheets.length - 3)
   })
 
   it('formate les euros avec une virgule', () => {

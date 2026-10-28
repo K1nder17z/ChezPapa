@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from 'react'
 import { PageFlip } from 'page-flip/dist/js/page-flip.module.js'
+import { bindCartButtons } from './syncBookDom.ts'
 
 export type BookStatus = {
   index: number
@@ -21,10 +22,11 @@ type FlipBookProps = {
   startPage: number
   reducedMotion: boolean
   onStatus: (status: BookStatus) => void
+  onReady?: () => void
 }
 
 export const FlipBook = forwardRef<BookHandle, FlipBookProps>(function FlipBook(
-  { children, pageWidth, pageHeight, spread, startPage, reducedMotion, onStatus },
+  { children, pageWidth, pageHeight, spread, startPage, reducedMotion, onStatus, onReady },
   ref,
 ) {
   const sourceRef = useRef<HTMLDivElement>(null)
@@ -33,12 +35,14 @@ export const FlipBook = forwardRef<BookHandle, FlipBookProps>(function FlipBook(
   const indexRef = useRef(startPage)
   const countRef = useRef(1)
   const onStatusRef = useRef(onStatus)
+  const onReadyRef = useRef(onReady)
   const [failed, setFailed] = useState(false)
   const [plainIndex, setPlainIndex] = useState(startPage)
 
   useEffect(() => {
     onStatusRef.current = onStatus
-  }, [onStatus])
+    onReadyRef.current = onReady
+  }, [onReady, onStatus])
 
   useImperativeHandle(ref, () => ({
     next() {
@@ -83,6 +87,7 @@ export const FlipBook = forwardRef<BookHandle, FlipBookProps>(function FlipBook(
     mount.appendChild(host)
 
     const pages = Array.from(source.children, (node) => node.cloneNode(true) as HTMLElement)
+    pages.forEach((page) => bindCartButtons(page))
     countRef.current = pages.length
     let book: PageFlip | null = null
 
@@ -142,6 +147,7 @@ export const FlipBook = forwardRef<BookHandle, FlipBookProps>(function FlipBook(
       flipRef.current = book
       report()
       host.classList.add('is-ready')
+      onReadyRef.current?.()
 
       return () => {
         host.removeEventListener('click', onClick)
@@ -156,6 +162,7 @@ export const FlipBook = forwardRef<BookHandle, FlipBookProps>(function FlipBook(
       host.remove()
       queueMicrotask(() => {
         setFailed(true)
+        onReadyRef.current?.()
         onStatusRef.current({
           index: indexRef.current,
           count: pages.length,

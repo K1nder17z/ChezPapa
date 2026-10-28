@@ -4,6 +4,7 @@ import { Corners } from './Ornaments.tsx'
 export function CoverFace() {
   return (
     <div className="cover-face">
+      <span className="paper-pattern" aria-hidden="true" />
       <span className="cover-sheen" aria-hidden="true" />
       <Corners />
       <div className="cover-frame">

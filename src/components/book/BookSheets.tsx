@@ -2,12 +2,14 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { CoverFace } from '../brand/CoverFace.tsx'
 import { Arch, Corners, Emblem, Rule } from '../brand/Ornaments.tsx'
-import { hasContactDetails, restaurant } from '../../config/restaurant.ts'
+import { restaurant } from '../../config/restaurant.ts'
 import { categories } from '../../data/menu.ts'
 import { photos } from '../../data/photos.ts'
 import { categoryPageIndex, type BookSheet } from '../../lib/sheets.ts'
 import { DishList } from '../menu/DishList.tsx'
+import { OrderSheet } from '../order/OrderSheet.tsx'
 import { Plate } from '../menu/Plate.tsx'
+import { GoogleStars } from '../review/GoogleStars.tsx'
 
 export function BookSheets({ sheets }: { sheets: BookSheet[] }) {
   return sheets.map((sheet, index) => {
@@ -16,6 +18,7 @@ export function BookSheets({ sheets }: { sheets: BookSheet[] }) {
       <article
         key={sheet.id}
         className={`sheet sheet--${sheet.kind}`}
+        data-sheet={sheet.id}
         data-density={hard ? 'hard' : 'soft'}
       >
         {sheet.kind === 'cover' ? <CoverFace /> : null}
@@ -24,6 +27,7 @@ export function BookSheets({ sheets }: { sheets: BookSheet[] }) {
         {sheet.kind === 'category' ? (
           <CategorySheet categoryId={sheet.categoryId} index={index} total={sheets.length} />
         ) : null}
+        {sheet.kind === 'order' ? <OrderPaper index={index} total={sheets.length} /> : null}
         {sheet.kind === 'closing' ? <ClosingSheet index={index} total={sheets.length} /> : null}
       </article>
     )
@@ -87,6 +91,14 @@ function TocSheet({ sheets, index }: { sheets: BookSheet[]; index: number }) {
               </li>
             )
           })}
+          <li>
+            <button type="button" data-turn-to={sheets.findIndex((sheet) => sheet.kind === 'order')}>
+              <span>Votre commande</span>
+              <span className="toc-page-no">
+                {sheets.findIndex((sheet) => sheet.kind === 'order') + 1}
+              </span>
+            </button>
+          </li>
         </ul>
       </div>
     </Paper>
@@ -122,15 +134,32 @@ function CategorySheet({
   )
 }
 
+function OrderPaper({ index, total }: { index: number; total: number }) {
+  return (
+    <Paper index={index} total={total}>
+      <OrderSheet />
+    </Paper>
+  )
+}
+
 function ClosingSheet({ index, total }: { index: number; total: number }) {
-  const showContact = hasContactDetails()
+  const showContact = Boolean(
+    restaurant.address ||
+      restaurant.phone ||
+      restaurant.hours ||
+      restaurant.mapsUrl ||
+      restaurant.instagram ||
+      restaurant.facebook,
+  )
   return (
     <div className="closing-face">
+      <span className="paper-pattern" aria-hidden="true" />
       <Corners />
       <Emblem />
       <p className="kicker light">Chez Papa</p>
       <h2>Merci de votre visite</h2>
       <p className="closing-wish">Toute l’équipe de Chez Papa vous souhaite un bon appétit !</p>
+      {restaurant.reviewsUrl ? <GoogleStars url={restaurant.reviewsUrl} /> : null}
       <p className="closing-note">Allergènes selon la recette habituelle. Prévenez-nous en cas d’allergie.</p>
       {showContact ? (
         <ul className="contact-list">
@@ -144,11 +173,6 @@ function ClosingSheet({ index, total }: { index: number; total: number }) {
           {restaurant.mapsUrl ? (
             <li>
               <a href={restaurant.mapsUrl}>Itinéraire</a>
-            </li>
-          ) : null}
-          {restaurant.reviewsUrl ? (
-            <li>
-              <a href={restaurant.reviewsUrl}>Avis</a>
             </li>
           ) : null}
           {restaurant.instagram ? (
@@ -168,7 +192,7 @@ function ClosingSheet({ index, total }: { index: number; total: number }) {
         <span> / {total}</span>
       </p>
       <Link className="credits-link" to="/credits">
-        Crédits photographiques
+        Illustrations
       </Link>
     </div>
   )

@@ -4,6 +4,8 @@ import { CreditsPage } from './pages/CreditsPage.tsx'
 import { MenuExperience } from './pages/MenuExperience.tsx'
 import { NotFoundPage } from './pages/NotFoundPage.tsx'
 import { PrintPage } from './pages/PrintPage.tsx'
+import { SallePage } from './pages/SallePage.tsx'
+import { ServicePage } from './pages/ServicePage.tsx'
 import { buildRestaurantJsonLd } from './seo/jsonld.ts'
 
 export default function App() {
@@ -21,6 +23,8 @@ export default function App() {
         <Route path="/" element={<MenuExperience />} />
         <Route path="/menu" element={<MenuExperience />} />
         <Route path="/impression" element={<PrintPage />} />
+        <Route path="/service/:code" element={<ServicePage />} />
+        <Route path="/salle" element={<SallePage />} />
         <Route path="/credits" element={<CreditsPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

@@ -13,7 +13,17 @@ export type Dish = {
   supplement?: Supplement
 }
 
-export type PhotoId = 'harira' | 'couscous' | 'poulet' | 'grill' | 'tea' | 'frites'
+export type PhotoId =
+  | 'harira'
+  | 'couscous'
+  | 'poulet'
+  | 'grill'
+  | 'tea'
+  | 'frites'
+  | 'entrees'
+  | 'snacks'
+  | 'specialites'
+  | 'tiramisu'
 
 export type CategoryLayout = 'feature' | 'editorial' | 'plain' | 'columns'
 
