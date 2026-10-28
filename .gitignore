@@ -26,3 +26,5 @@ tmp-photos
 *.njsproj
 *.sln
 *.sw?
+
+.vercel
