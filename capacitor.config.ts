@@ -8,7 +8,9 @@ const config: CapacitorConfig = {
     allowMixedContent: false,
   },
   server: {
+    url: 'https://chezpapa-beta.vercel.app/salle',
     androidScheme: 'https',
+    allowNavigation: ['chezpapa-beta.vercel.app'],
   },
 }
 

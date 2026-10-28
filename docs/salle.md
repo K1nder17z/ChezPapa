@@ -67,7 +67,7 @@ Créer le projet Supabase « Chez Papa » dans l’organisation existante coûte
 
 ## Application Android
 
-L’application est une coque Capacitor autour du même site. Elle n’a pas de seconde base. Elle s’installe par APK, sans Play Store.
+L’application est une coque Capacitor. La version 2.0 (`versionCode` 3) ouvre directement `https://chezpapa-beta.vercel.app/salle`. Le tableau, les tables et le scanner sont donc ceux du site en ligne, pas une copie figée dans l’APK. Elle n’a pas de seconde base. Elle s’installe par APK, sans Play Store.
 
 ```powershell
 npm install
@@ -80,7 +80,7 @@ cd android
 
 L’APK de test se trouve alors dans `android\app\build\outputs\apk\debug\app-debug.apk`. Il est signé avec le certificat de débogage d’Android Studio, pas avec un certificat de production. Ce fichier n’est pas versionné : le dossier `android/app/build` est ignoré par Git.
 
-Construction locale du 28 octobre 2026 : `app-debug.apk`, 6 113 406 octets, empreinte SHA-256 `9899a1bbf344362d6c898183223fac66f18b4aed4f432e1fbc90d0b7a33ca152`. Une reconstruction change cette empreinte. Aucun téléphone physique n’a été utilisé pour l’installation.
+Construction locale du 28 octobre 2026, version 2.0 : `app-debug.apk`, 6 115 490 octets, empreinte SHA-256 `a8907f48ac501e792acc63272f11192408d7eb0500b1297f7232b480d47b8cbe`. Le certificat de débogage est le même que celui de la version 1.1, donc l’installation par-dessus est acceptée. Une reconstruction change cette empreinte. Aucun téléphone physique n’a été utilisé pour l’installation.
 
 Java 21 et le SDK Android (`ANDROID_HOME`) sont nécessaires. Sans `ANDROID_HOME`, le SDK installé par Android Studio est souvent dans `%LOCALAPPDATA%\Android\Sdk`. Si `JAVA_HOME` pointe encore vers un ancien dossier JDK supprimé, la construction échoue : le définir pour la session sur le JDK réellement installé, par exemple `C:\Program Files\Microsoft\jdk-21.0.11.10-hotspot`.
 
